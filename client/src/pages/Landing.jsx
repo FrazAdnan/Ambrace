@@ -1,108 +1,161 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import Lenis from 'lenis';
+import PinnedSequence from '../components/PinnedSequence';
+import HeroSequence from '../components/HeroSequence';
+import PartnerSection from '../components/PartnerSection';
+import MechanicsSequence from '../components/MechanicsSequence';
+import ProcessSequence from '../components/ProcessSequence';
+import SafetySequence from '../components/SafetySequence';
+import AuthModal from '../components/AuthModal';
+import Header from '../components/Header';
+import Footer from '../components/Footer';
+import { useAuth } from '../context/AuthContext';
 
-const PARTICLES = Array.from({ length: 60 }, (_, i) => ({
-  id: i,
-  x: Math.random() * 100,
-  y: Math.random() * 100,
-  size: Math.random() * 3 + 1,
-  duration: Math.random() * 20 + 10,
-  delay: Math.random() * 10,
-  opacity: Math.random() * 0.5 + 0.1,
-}));
+export default function Landing({ onSelectRole, onLaunchApp, onExploreCareers, onExploreRewards, onHome }) {
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const { user } = useAuth();
 
-export default function Landing({ onSelectRole }) {
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      const x = (e.clientX / window.innerWidth - 0.5) * 2;
+      const y = (e.clientY / window.innerHeight - 0.5) * 2;
+      setMousePos({ x, y });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+        }
+      });
+    }, { threshold: 0.15 });
+
+    const elements = document.querySelectorAll('.fade-up, .fade-in');
+    elements.forEach(el => observer.observe(el));
+
+    // Initialize Lenis for smooth scrolling
+    const lenis = new Lenis({
+      duration: 1.2,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      direction: 'vertical',
+      gestureDirection: 'vertical',
+      smooth: true,
+      mouseMultiplier: 1,
+      smoothTouch: false,
+      touchMultiplier: 2,
+      infinite: false,
+    });
+
+    function raf(time) {
+      lenis.raf(time);
+      requestAnimationFrame(raf);
+    }
+    requestAnimationFrame(raf);
+
+    return () => {
+      observer.disconnect();
+      lenis.destroy();
+    };
+  }, []);
+
   return (
-    <div style={{ minHeight: '100vh', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-      {/* Background */}
-      <div style={{ position: 'fixed', inset: 0, background: 'var(--bg-primary)' }} />
+    <div style={{ minHeight: '100vh', position: 'relative', background: 'var(--bg-primary)', color: 'var(--text-primary)', overflowX: 'clip' }}>
+      
+      {/* Fixed Ambient Glows */}
       <div style={{ position: 'fixed', inset: 0, background: 'var(--gradient-hero)', pointerEvents: 'none' }} />
+      <div style={{
+        position: 'fixed', width: '80vw', height: '80vh', borderRadius: '50%',
+        background: 'var(--glow-primary)',
+        top: '-20%', left: '-10%', pointerEvents: 'none',
+        transform: `translate(${mousePos.x * 50}px, ${mousePos.y * 50}px)`,
+        transition: 'transform 0.15s ease-out'
+      }} />
+      <div style={{
+        position: 'fixed', width: '70vw', height: '70vh', borderRadius: '50%',
+        background: 'var(--glow-secondary)',
+        bottom: '-20%', right: '-10%', pointerEvents: 'none',
+        transform: `translate(${mousePos.x * -60}px, ${mousePos.y * -60}px)`,
+        transition: 'transform 0.15s ease-out'
+      }} />
+      <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', backdropFilter: 'blur(80px) saturate(150%)', WebkitBackdropFilter: 'blur(80px) saturate(150%)' }} />
 
-      {/* Particles */}
-      <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none' }}>
-        {PARTICLES.map(p => (
-          <div key={p.id} style={{
-            position: 'absolute', left: `${p.x}%`, top: `${p.y}%`,
-            width: p.size, height: p.size, borderRadius: '50%',
-            background: p.id % 2 === 0 ? 'var(--accent-purple)' : 'var(--accent-cyan)',
-            opacity: p.opacity,
-            animation: `float ${p.duration}s ${p.delay}s ease-in-out infinite alternate`,
-          }} />
-        ))}
-      </div>
 
-      {/* Glowing orbs */}
-      <div style={{ position: 'fixed', width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%)', top: '-100px', left: '-100px', pointerEvents: 'none' }} />
-      <div style={{ position: 'fixed', width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(6,182,212,0.12) 0%, transparent 70%)', bottom: '-80px', right: '-80px', pointerEvents: 'none' }} />
 
-      {/* Content */}
-      <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', padding: '0 24px', maxWidth: 800, width: '100%' }}>
-        {/* Logo */}
-        <div className="fade-up" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 32 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 14, background: 'var(--gradient-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: 'var(--shadow-purple)' }}>🎓</div>
-          <span style={{ fontFamily: 'Outfit', fontSize: '1.4rem', fontWeight: 700, letterSpacing: '-0.02em' }}>EduConnect</span>
-        </div>
+      {/* Navbar */}
+      <Header 
+        onSelectRole={onSelectRole} 
+        onExploreRewards={onExploreRewards} 
+        onLoginClick={() => setIsAuthOpen(true)} 
+        onHome={onHome}
+      />
 
-        <h1 className="fade-up" style={{ fontSize: 'clamp(2.5rem, 6vw, 4.5rem)', fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.03em', marginBottom: 20, animationDelay: '0.1s' }}>
-          Learn from Real<br />
-          <span className="gradient-text">Teachers, Live</span>
-        </h1>
+      <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} />
 
-        <p className="fade-up" style={{ fontSize: 'clamp(1rem, 2vw, 1.2rem)', color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 56, maxWidth: 520, margin: '0 auto 56px', animationDelay: '0.2s' }}>
-          Connect instantly with teachers who can answer your questions in real-time — like a video call, built for learning.
-        </p>
+      <main style={{ position: 'relative', zIndex: 1, padding: '0 24px' }}>
+        
+        <HeroSequence 
+          onSelectRole={(role) => {
+            if (user) onSelectRole(user.role);
+            else setIsAuthOpen(true);
+          }} 
+          onLaunchApp={() => {
+            if (user) onLaunchApp();
+            else setIsAuthOpen(true);
+          }} 
+          onExploreCareers={onExploreCareers} 
+        />
+        
+        <PartnerSection />
+        
+        <PinnedSequence />
 
-        {/* Role cards */}
-        <div className="fade-up" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, maxWidth: 560, margin: '0 auto', animationDelay: '0.3s' }}>
-          <RoleCard
-            emoji="📚"
-            title="I'm a Student"
-            desc="Find a teacher and get your doubts cleared instantly"
-            accent="var(--accent-cyan)"
-            accentBg="rgba(6,182,212,0.1)"
-            accentBorder="rgba(6,182,212,0.25)"
-            onClick={() => onSelectRole('student')}
-          />
-          <RoleCard
-            emoji="🏫"
-            title="I'm a Teacher"
-            desc="Help students by sharing your knowledge and expertise"
-            accent="var(--accent-purple-light)"
-            accentBg="rgba(124,58,237,0.1)"
-            accentBorder="rgba(124,58,237,0.25)"
-            onClick={() => onSelectRole('teacher')}
-          />
-        </div>
-
-        {/* Stats bar */}
-        <div className="fade-up" style={{ display: 'flex', gap: 32, justifyContent: 'center', marginTop: 56, animationDelay: '0.4s' }}>
-          {[['1000+', 'Students'], ['200+', 'Teachers'], ['10+', 'Subjects']].map(([num, label]) => (
-            <div key={label} style={{ textAlign: 'center' }}>
-              <div style={{ fontFamily: 'Outfit', fontSize: '1.5rem', fontWeight: 700 }}>{num}</div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 2 }}>{label}</div>
+        {/* Mock UI Element */}
+        <section className="fade-up" style={{ maxWidth: 1000, margin: '120px auto', perspective: 1000 }}>
+          <div style={{ maxWidth: 1000, margin: '0 auto', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', borderRadius: 32, padding: 32, backdropFilter: 'blur(40px)', WebkitBackdropFilter: 'blur(40px)', transform: `rotateX(${mousePos.y * -2}deg) rotateY(${mousePos.x * 2}deg)`, transition: 'transform 0.1s ease-out', boxShadow: '0 32px 64px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--glass-border)', paddingBottom: 20, marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#ff5f56' }}/>
+                  <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#ffbd2e' }}/>
+                  <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#27c93f' }}/>
+                </div>
+              </div>
+              <div style={{ color: 'var(--accent-emerald)', fontSize: '0.8rem', fontWeight: 600, letterSpacing: '0.05em' }}>SYSTEM ACTIVE</div>
             </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
+            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+              <h3 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: 16 }}>Ready to begin?</h3>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12, background: 'var(--glass-bg)', padding: '12px 24px', borderRadius: 99, border: '1px solid var(--glass-border)', marginBottom: 24 }}>
+                <span style={{ color: 'var(--text-muted)' }}>Subject:</span>
+                <span style={{ fontWeight: 600 }}>Advanced Physics - Relativity</span>
+              </div>
+              <div>
+                <span className="badge badge-blue">TEACHER KYC</span>
+                <span className="badge badge-indigo" style={{ marginLeft: 8 }}>Verified Professional</span>
+              </div>
+            </div>
+          </div>
+        </section>
 
-function RoleCard({ emoji, title, desc, accent, accentBg, accentBorder, onClick }) {
-  return (
-    <button onClick={onClick} style={{
-      background: accentBg, border: `1px solid ${accentBorder}`,
-      borderRadius: 'var(--radius-xl)', padding: '28px 20px',
-      cursor: 'pointer', transition: 'all 0.25s ease', textAlign: 'left', color: 'var(--text-primary)',
-    }}
-      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = `0 20px 40px ${accentBg}`; }}
-      onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
-    >
-      <div style={{ fontSize: '2.5rem', marginBottom: 14 }}>{emoji}</div>
-      <div style={{ fontFamily: 'Outfit', fontSize: '1.1rem', fontWeight: 700, marginBottom: 8 }}>{title}</div>
-      <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{desc}</div>
-      <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 6, color: accent, fontSize: '0.82rem', fontWeight: 600 }}>
-        Get started <span style={{ fontSize: '1rem' }}>→</span>
-      </div>
-    </button>
+        <MechanicsSequence />
+        
+        <ProcessSequence />
+        
+        <SafetySequence />
+
+      </main>
+
+      {/* Footer */}
+      <Footer onExploreCareers={onExploreCareers} onLaunchApp={() => {
+        if (user) onLaunchApp();
+        else setIsAuthOpen(true);
+      }} />
+
+    </div>
   );
 }

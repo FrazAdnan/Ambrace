@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../hooks/useSocket';
+import { useAuth } from '../context/AuthContext';
 
 const SUBJECTS = [
   { id: 'math', label: 'Mathematics', icon: '∑' },
@@ -13,7 +14,8 @@ const SUBJECTS = [
 ];
 
 export default function StudentLobby({ onMatched, onBack }) {
-  const [name, setName] = useState('');
+  const { user } = useAuth();
+  const [name, setName] = useState(user?.name || '');
   const [subject, setSubject] = useState('');
   const [step, setStep] = useState('setup'); // setup | waiting | found
   const [queuePos, setQueuePos] = useState(null);
@@ -24,7 +26,9 @@ export default function StudentLobby({ onMatched, onBack }) {
     'match:found': (data) => {
       setStep('found');
       setMatchData(data);
-      setTimeout(() => onMatched(data), 2000);
+    },
+    'match:accepted': (data) => {
+      onMatched(data);
     },
     'queue:position': ({ position }) => setQueuePos(position),
     'match:declined': () => {

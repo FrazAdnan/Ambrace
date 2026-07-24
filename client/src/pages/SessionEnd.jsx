@@ -115,7 +115,7 @@ export default function SessionEnd({ sessionData, onRestart, onHome }) {
             <div style={{ fontSize: '3.5rem', marginBottom: 16, animation: 'float 2s ease-in-out infinite' }}>✨</div>
             <h2 style={{ fontFamily: 'Outfit', fontSize: '1.8rem', fontWeight: 700, marginBottom: 12 }}>Thank you!</h2>
             <p style={{ color: 'var(--text-secondary)', marginBottom: 36, fontSize: '0.95rem' }}>
-              Your feedback helps us improve EduConnect.
+              Your feedback helps us improve Ambrace.
             </p>
             <div style={{ display: 'flex', gap: 12 }}>
               <button className="btn btn-primary btn-lg" style={{ flex: 1 }} onClick={onRestart} id="new-session-btn">

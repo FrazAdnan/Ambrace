@@ -14,6 +14,7 @@ export function useWebRTC({ roomId, isInitiator, onCallEnd }) {
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
   const pendingCandidates = useRef([]);
+  const pendingOfferRef = useRef(null);
 
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
@@ -48,11 +49,17 @@ export function useWebRTC({ roomId, isInitiator, onCallEnd }) {
 
   useEffect(() => {
     if (!roomId) return;
+    let isMounted = true;
     let pc;
 
     async function setup() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        if (!isMounted) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+
         localStreamRef.current = stream;
         if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
@@ -63,7 +70,18 @@ export function useWebRTC({ roomId, isInitiator, onCallEnd }) {
         if (isInitiator) {
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
-          socket.emit('webrtc:offer', { roomId, offer });
+          if (isMounted) socket.emit('webrtc:offer', { roomId, offer });
+        } else if (pendingOfferRef.current) {
+          // Process the offer that arrived while we were waiting for the camera
+          const pendingOffer = pendingOfferRef.current;
+          pendingOfferRef.current = null;
+          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(pendingOffer));
+          const answer = await peerConnectionRef.current.createAnswer();
+          await peerConnectionRef.current.setLocalDescription(answer);
+          if (isMounted) socket.emit('webrtc:answer', { roomId, answer });
+          for (const c of pendingCandidates.current)
+            await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(c));
+          pendingCandidates.current = [];
         }
       } catch (err) {
         console.error('WebRTC setup error:', err);
@@ -73,7 +91,10 @@ export function useWebRTC({ roomId, isInitiator, onCallEnd }) {
     setup();
 
     const handleOffer = async ({ offer }) => {
-      if (!peerConnectionRef.current) return;
+      if (!peerConnectionRef.current) {
+        pendingOfferRef.current = offer;
+        return;
+      }
       await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(offer));
       const answer = await peerConnectionRef.current.createAnswer();
       await peerConnectionRef.current.setLocalDescription(answer);
@@ -92,10 +113,11 @@ export function useWebRTC({ roomId, isInitiator, onCallEnd }) {
     };
 
     const handleCandidate = async ({ candidate }) => {
-      if (!peerConnectionRef.current) return;
-      if (peerConnectionRef.current.remoteDescription)
-        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-      else pendingCandidates.current.push(candidate);
+      if (!peerConnectionRef.current || !peerConnectionRef.current.remoteDescription) {
+        pendingCandidates.current.push(candidate);
+        return;
+      }
+      await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
     };
 
     socket.on('webrtc:offer', handleOffer);
@@ -103,11 +125,13 @@ export function useWebRTC({ roomId, isInitiator, onCallEnd }) {
     socket.on('webrtc:ice-candidate', handleCandidate);
 
     return () => {
+      isMounted = false;
       socket.off('webrtc:offer', handleOffer);
       socket.off('webrtc:answer', handleAnswer);
       socket.off('webrtc:ice-candidate', handleCandidate);
       localStreamRef.current?.getTracks().forEach(t => t.stop());
-      peerConnectionRef.current?.close();
+      if (pc) pc.close();
+      else peerConnectionRef.current?.close();
     };
   }, [roomId, isInitiator, createPeerConnection, socket]);
 

@@ -3,6 +3,13 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
+import dotenv from 'dotenv';
+import { GoogleGenAI } from '@google/genai';
+import authRoutes from './auth.js';
+
+dotenv.config();
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const app = express();
 const httpServer = createServer(app);
@@ -19,6 +26,9 @@ const allowedOrigins = process.env.CLIENT_URL
 
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
+
+// ─── API Routes ──────────────────────────────────────────────────────────────
+app.use('/api/auth', authRoutes);
 
 // ─── In-Memory State ─────────────────────────────────────────────────────────
 const teachers = new Map();     // socketId → { name, subjects, status: 'available'|'busy' }
@@ -37,6 +47,17 @@ function getStats() {
 
 function broadcastStats() {
   io.emit('server:stats', getStats());
+}
+
+function broadcastQueue() {
+  // Send sanitized queue (no socket IDs) to all clients so teachers can see waiting students
+  const publicQueue = studentQueue.map(s => ({
+    id: s.socketId,   // needed for teacher to request a specific student
+    name: s.name,
+    subject: s.subject,
+    waitingSince: s.timestamp,
+  }));
+  io.emit('queue:update', publicQueue);
 }
 
 function tryMatch(studentSocketId) {
@@ -60,7 +81,9 @@ function tryMatch(studentSocketId) {
       // Create room record (pending acceptance)
       rooms.set(roomId, {
         studentId: studentSocketId,
+        studentName: student.name,
         teacherId: teacherSocketId,
+        teacherName: teacher.name,
         subject: student.subject,
         startTime: null,
         status: 'pending',
@@ -81,6 +104,7 @@ function tryMatch(studentSocketId) {
 
       console.log(`[MATCH] ${student.name} ↔ ${teacher.name} | Subject: ${student.subject} | Room: ${roomId}`);
       broadcastStats();
+      broadcastQueue();
       return;
     }
   }
@@ -94,6 +118,8 @@ function tryMatch(studentSocketId) {
 io.on('connection', (socket) => {
   console.log(`[CONNECT] ${socket.id}`);
   socket.emit('server:stats', getStats());
+  // Send current queue state to new connection
+  socket.emit('queue:update', studentQueue.map(s => ({ id: s.socketId, name: s.name, subject: s.subject, waitingSince: s.timestamp })));
 
   // ── Teacher: Go Online ──────────────────────────────────────────────────
   socket.on('teacher:online', ({ name, subjects }) => {
@@ -111,6 +137,7 @@ io.on('connection', (socket) => {
       }
     }
     broadcastStats();
+    broadcastQueue();
   });
 
   // ── Teacher: Update Subjects ────────────────────────────────────────────
@@ -134,6 +161,7 @@ io.on('connection', (socket) => {
       studentQueue.push({ socketId: socket.id, name, subject, timestamp: Date.now() });
     }
     broadcastStats();
+    broadcastQueue();
     tryMatch(socket.id);
   });
 
@@ -142,6 +170,7 @@ io.on('connection', (socket) => {
     const idx = studentQueue.findIndex(s => s.socketId === socket.id);
     if (idx !== -1) studentQueue.splice(idx, 1);
     broadcastStats();
+    broadcastQueue();
   });
 
   // ── Teacher: Accept Match ───────────────────────────────────────────────
@@ -161,8 +190,18 @@ io.on('connection', (socket) => {
     studentSocket?.join(roomId);
 
     // Student is initiator (creates offer)
-    io.to(room.studentId).emit('match:accepted', { roomId, initiator: true });
-    io.to(room.teacherId).emit('match:accepted', { roomId, initiator: false });
+    io.to(room.studentId).emit('match:accepted', { 
+      roomId, 
+      initiator: true,
+      partner: { name: room.teacherName, role: 'teacher' },
+      subject: room.subject
+    });
+    io.to(room.teacherId).emit('match:accepted', { 
+      roomId, 
+      initiator: false,
+      partner: { name: room.studentName, role: 'student' },
+      subject: room.subject
+    });
 
     console.log(`[SESSION START] Room: ${roomId}`);
     broadcastStats();
@@ -182,6 +221,7 @@ io.on('connection', (socket) => {
     io.to(room.studentId).emit('match:declined', {});
     console.log(`[MATCH DECLINED] Room: ${roomId}`);
     broadcastStats();
+    broadcastQueue();
   });
 
   // ── WebRTC: Offer ───────────────────────────────────────────────────────
@@ -212,12 +252,25 @@ io.on('connection', (socket) => {
   socket.on('chat:message', ({ roomId, message, senderName }) => {
     const room = rooms.get(roomId);
     if (!room) return;
-    io.to(roomId).emit('chat:message', {
+    socket.to(roomId).emit('chat:message', {
       message,
       senderName,
       senderId: socket.id,
       timestamp: Date.now(),
     });
+  });
+
+  // ── Whiteboard ──────────────────────────────────────────────────────────
+  socket.on('board:draw', ({ roomId, data }) => {
+    socket.to(roomId).emit('board:draw', data);
+  });
+
+  socket.on('board:clear', ({ roomId }) => {
+    socket.to(roomId).emit('board:clear');
+  });
+
+  socket.on('board:toggle', ({ roomId, isOpen }) => {
+    socket.to(roomId).emit('board:toggle', { isOpen });
   });
 
   // ── End Session ─────────────────────────────────────────────────────────
@@ -269,7 +322,42 @@ io.on('connection', (socket) => {
     }
 
     broadcastStats();
+    broadcastQueue();
   });
+});
+
+// ─── AI Chat Endpoint ─────────────────────────────────────────────────────────
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { messages } = req.body;
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: 'Messages array is required' });
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ error: 'Gemini API Key is not configured' });
+    }
+
+    // Convert client messages to Gen AI SDK format
+    const contents = messages.map(msg => ({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.content }]
+    }));
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: contents,
+      config: {
+        systemInstruction: "You are an AI Tutor named Ambrace Assistant. You are helpful, encouraging, and concise. You help students learn and provide guidance to teachers.",
+        temperature: 0.7,
+      }
+    });
+
+    res.json({ response: response.text });
+  } catch (error) {
+    console.error('[AI CHAT ERROR]', error);
+    res.status(500).json({ error: 'Failed to generate response' });
+  }
 });
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
