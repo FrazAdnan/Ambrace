@@ -3,7 +3,7 @@ services:
     name: educonnect-server
     env: node
     rootDir: server
-    buildCommand: npm install
+    buildCommand: npm install && npx prisma db push
     startCommand: node index.js
     envVars:
       - key: NODE_ENV
