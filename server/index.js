@@ -350,6 +350,7 @@ app.post('/api/chat', async (req, res) => {
       config: {
         systemInstruction: "You are an AI Tutor named Ambrace Assistant. You are helpful, encouraging, and concise. You help students learn and provide guidance to teachers.",
         temperature: 0.7,
+        tools: [{ googleSearch: {} }],
       }
     });
 

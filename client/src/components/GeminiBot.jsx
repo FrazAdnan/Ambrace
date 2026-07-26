@@ -24,7 +24,8 @@ export default function GeminiBot() {
     setIsLoading(true);
 
     try {
-      const apiUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001/api/chat' : '/api/chat';
+      const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+      const apiUrl = `${SERVER_URL}/api/chat`;
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
