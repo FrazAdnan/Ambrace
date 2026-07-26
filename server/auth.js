@@ -42,7 +42,7 @@ router.post('/register', async (req, res) => {
     res.status(201).json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, isBetaAdmitted: user.isBetaAdmitted } });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
 
@@ -73,7 +73,7 @@ router.post('/login', async (req, res) => {
     res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, isBetaAdmitted: user.isBetaAdmitted } });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
 
